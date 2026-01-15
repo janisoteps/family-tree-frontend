@@ -6,13 +6,15 @@ import {
   MiniMap,
   ReactFlowProvider,
   useReactFlow,
+  useNodesState,
+  useEdgesState,
 } from '@xyflow/react';
 import type { Node, Edge, NodeTypes, EdgeTypes } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { PersonNode } from './PersonNode';
 import { ParentEdge } from './ParentEdge';
 import { UnionEdge } from './UnionEdge';
-import { useLayoutedGraph } from './useLayoutedGraph';
+import { calculateNodePositions } from './useLayoutedGraph';
 import { Modal } from '../ui/Modal';
 import { Sidebar } from '../ui/Sidebar';
 import { PersonForm } from '../forms/PersonForm';
@@ -25,6 +27,7 @@ import {
   createUnion,
   createParentOf,
   deletePerson,
+  updatePersonPosition,
 } from '../../services/familyTreeService';
 import type {
   FamilyTreeGraph,
@@ -84,8 +87,8 @@ function transformToReactFlow(graph: FamilyTreeGraph) {
 }
 
 function FamilyTreeInner() {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [graphData, setGraphData] = useState<FamilyTreeGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +111,6 @@ function FamilyTreeInner() {
   } | null>(null);
 
   const { fitView } = useReactFlow();
-  const { nodes: layoutedNodes, edges: layoutedEdges } = useLayoutedGraph(nodes, edges);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -117,25 +119,22 @@ function FamilyTreeInner() {
       const graph = await getFamilyTreeGraph();
       setGraphData(graph);
       const { nodes: rfNodes, edges: rfEdges } = transformToReactFlow(graph);
-      setNodes(rfNodes);
-      setEdges(rfEdges);
+      // Calculate positions (uses stored positions or Dagre fallback)
+      const { nodes: layoutedNodes, edges: layoutedEdges } = calculateNodePositions(rfNodes, rfEdges);
+      setNodes(layoutedNodes);
+      setEdges(layoutedEdges);
+      setTimeout(() => fitView({ padding: 0.2 }), 100);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load family tree');
       console.error('Error loading graph:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setNodes, setEdges, fitView]);
 
   useEffect(() => {
     loadGraph();
   }, [loadGraph]);
-
-  useEffect(() => {
-    if (layoutedNodes.length > 0 && layoutedEdges.length >= 0) {
-      setTimeout(() => fitView({ padding: 0.2 }), 100);
-    }
-  }, [layoutedNodes.length, fitView]);
 
   const handleNodeClick = useCallback((person: Person) => {
     setSelectedNode(person);
@@ -179,6 +178,18 @@ function FamilyTreeInner() {
         y: event.clientY,
         personId: node.id,
       });
+    },
+    []
+  );
+
+  const handleNodeDragStop = useCallback(
+    async (_event: React.MouseEvent, node: Node) => {
+      try {
+        await updatePersonPosition(node.id, node.position.x, node.position.y);
+      } catch (err) {
+        console.error('Failed to save node position:', err);
+        // Position will be saved next time - no need to show error to user
+      }
     },
     []
   );
@@ -273,7 +284,7 @@ function FamilyTreeInner() {
     return { parents, children, spouses };
   }, [graphData]);
 
-  const nodesWithHandlers = layoutedNodes.map((node) => ({
+  const nodesWithHandlers = nodes.map((node) => ({
     ...node,
     data: {
       ...node.data,
@@ -303,18 +314,22 @@ function FamilyTreeInner() {
     <div className="family-tree-container">
       <ReactFlow
         nodes={nodesWithHandlers}
-        edges={layoutedEdges}
+        edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         onNodeClick={(_event, node) => handleNodeClick(node.data as unknown as Person)}
         onNodeDoubleClick={(_event, node) => handleNodeDoubleClick(node.data as unknown as Person)}
         onNodeContextMenu={handleNodeContextMenu}
+        onNodeDragStop={handleNodeDragStop}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         fitView
         minZoom={0.1}
         maxZoom={2}
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        nodesDraggable={true}
       >
         <Background gap={20} size={1} />
         <Controls />
