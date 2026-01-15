@@ -38,6 +38,8 @@ export interface Person {
   phone: string | null;
   current_address: string | null;
   data: string | null; // Stringified JSON
+  position_x: number | null; // X coordinate for graph layout (null = auto-layout)
+  position_y: number | null; // Y coordinate for graph layout (null = auto-layout)
 }
 
 /**
