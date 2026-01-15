@@ -235,3 +235,56 @@ export async function deletePerson(personId: string): Promise<void> {
   }
 }
 
+/**
+ * Updates a person's position in the graph layout
+ * @param personId - The ID of the person to update
+ * @param x - The X coordinate (pixels)
+ * @param y - The Y coordinate (pixels)
+ * @returns Promise resolving to the updated person
+ * @throws {ApiError} If the API request fails
+ */
+export async function updatePersonPosition(
+  personId: string,
+  x: number,
+  y: number
+): Promise<Person> {
+  const url = `${API_BASE_URL}${API_ENDPOINTS.PERSON}/${personId}/position`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ x, y }),
+    });
+
+    return handleResponse<Person>(response);
+  } catch (error) {
+    handleNetworkError(error);
+  }
+}
+
+/**
+ * Clears a person's position to reset to auto-layout
+ * @param personId - The ID of the person to reset
+ * @returns Promise resolving to the updated person
+ * @throws {ApiError} If the API request fails
+ */
+export async function clearPersonPosition(personId: string): Promise<Person> {
+  const url = `${API_BASE_URL}${API_ENDPOINTS.PERSON}/${personId}/position`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    return handleResponse<Person>(response);
+  } catch (error) {
+    handleNetworkError(error);
+  }
+}
+
