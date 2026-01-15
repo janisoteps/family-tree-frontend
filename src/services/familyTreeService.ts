@@ -171,3 +171,67 @@ export async function getFamilyTreeGraph(): Promise<FamilyTreeGraph> {
   }
 }
 
+/**
+ * Updates a person by ID (partial update)
+ * @param personId - The ID of the person to update
+ * @param input - The partial person data to update (only provided fields will be updated)
+ * @returns Promise resolving to the updated person
+ * @throws {ApiError} If the API request fails
+ */
+export async function updatePerson(
+  personId: string,
+  input: CreatePersonInput
+): Promise<Person> {
+  const url = `${API_BASE_URL}${API_ENDPOINTS.PERSON}/${personId}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    });
+
+    return handleResponse<Person>(response);
+  } catch (error) {
+    handleNetworkError(error);
+  }
+}
+
+/**
+ * Deletes a person by ID
+ * @param personId - The ID of the person to delete
+ * @returns Promise resolving to void
+ * @throws {ApiError} If the API request fails
+ */
+export async function deletePerson(personId: string): Promise<void> {
+  const url = `${API_BASE_URL}${API_ENDPOINTS.PERSON}/${personId}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new ApiError(
+        `API request failed: ${response.statusText}`,
+        response.status,
+        response.statusText
+      );
+    }
+
+    // DELETE requests may return empty body (204 No Content)
+    // Try to parse JSON if content exists, otherwise return void
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      await response.json();
+    }
+  } catch (error) {
+    handleNetworkError(error);
+  }
+}
+
