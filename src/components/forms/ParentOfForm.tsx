@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { CreateParentOfInput, Person } from '../../types/familyTree';
 import { listAllPersons } from '../../services/familyTreeService';
 import './ParentOfForm.css';
@@ -24,6 +24,21 @@ export function ParentOfForm({
     parent_type: 'biological',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Search states for parent and child
+  const [parentSearch, setParentSearch] = useState('');
+  const [childSearch, setChildSearch] = useState('');
+  const [showParentResults, setShowParentResults] = useState(false);
+  const [showChildResults, setShowChildResults] = useState(false);
+  const parentInputRef = useRef<HTMLInputElement>(null);
+  const childInputRef = useRef<HTMLInputElement>(null);
+  const parentResultsRef = useRef<HTMLDivElement>(null);
+  const childResultsRef = useRef<HTMLDivElement>(null);
+
+  const getPersonName = (person: Person) => {
+    const name = [person.first_name, person.last_name].filter(Boolean).join(' ');
+    return name || `Person ${person.id}`;
+  };
 
   useEffect(() => {
     async function fetchPersons() {
@@ -37,6 +52,43 @@ export function ParentOfForm({
       }
     }
     fetchPersons();
+  }, []);
+
+  // Set initial search values when persons are loaded and pre-selected values exist
+  useEffect(() => {
+    if (persons.length > 0) {
+      if (preSelectedParent) {
+        const parent = persons.find(p => p.id === preSelectedParent);
+        if (parent) {
+          setParentSearch(getPersonName(parent));
+        }
+      }
+      if (preSelectedChild) {
+        const child = persons.find(p => p.id === preSelectedChild);
+        if (child) {
+          setChildSearch(getPersonName(child));
+        }
+      }
+    }
+  }, [persons, preSelectedParent, preSelectedChild]);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (parentResultsRef.current && !parentResultsRef.current.contains(event.target as Node) && 
+          parentInputRef.current && !parentInputRef.current.contains(event.target as Node)) {
+        setShowParentResults(false);
+      }
+      if (childResultsRef.current && !childResultsRef.current.contains(event.target as Node) &&
+          childInputRef.current && !childInputRef.current.contains(event.target as Node)) {
+        setShowChildResults(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const handleChange = (field: keyof CreateParentOfInput, value: string | null) => {
@@ -57,53 +109,115 @@ export function ParentOfForm({
     }
   };
 
-  const getPersonName = (person: Person) => {
-    const name = [person.first_name, person.last_name].filter(Boolean).join(' ');
-    return name || `Person ${person.id}`;
+  const filterPersons = (searchQuery: string, excludeId?: string) => {
+    if (!searchQuery.trim()) {
+      return []; // Don't show results when search is empty
+    }
+    const query = searchQuery.toLowerCase();
+    return persons
+      .filter((p) => {
+        if (excludeId && p.id === excludeId) return false;
+        const name = getPersonName(p).toLowerCase();
+        return name.includes(query);
+      })
+      .slice(0, 10); // Limit to 10 results for better UX
+  };
+
+  const handleParentSelect = (person: Person) => {
+    setFormData((prev) => ({ ...prev, parent_id: person.id }));
+    setParentSearch(getPersonName(person));
+    setShowParentResults(false);
+  };
+
+  const handleChildSelect = (person: Person) => {
+    setFormData((prev) => ({ ...prev, child_id: person.id }));
+    setChildSearch(getPersonName(person));
+    setShowChildResults(false);
+  };
+
+  const handleParentSearchChange = (value: string) => {
+    setParentSearch(value);
+    setShowParentResults(true);
+    if (!value) {
+      setFormData((prev) => ({ ...prev, parent_id: '' }));
+    }
+  };
+
+  const handleChildSearchChange = (value: string) => {
+    setChildSearch(value);
+    setShowChildResults(true);
+    if (!value) {
+      setFormData((prev) => ({ ...prev, child_id: '' }));
+    }
   };
 
   if (loading) {
     return <div>Loading persons...</div>;
   }
 
+  const filteredParents = filterPersons(parentSearch, formData.child_id);
+  const filteredChildren = filterPersons(childSearch, formData.parent_id);
+
   return (
     <form onSubmit={handleSubmit} className="parent-of-form">
       <div className="form-group">
         <label htmlFor="parent_id">Parent *</label>
-        <select
-          id="parent_id"
-          value={formData.parent_id}
-          onChange={(e) => handleChange('parent_id', e.target.value)}
-          required
-        >
-          <option value="">Select parent...</option>
-          {persons
-            .filter((p) => p.id !== formData.child_id)
-            .map((person) => (
-              <option key={person.id} value={person.id}>
-                {getPersonName(person)}
-              </option>
-            ))}
-        </select>
+        <div className="search-field-container">
+          <input
+            ref={parentInputRef}
+            id="parent_id"
+            type="text"
+            value={parentSearch}
+            onChange={(e) => handleParentSearchChange(e.target.value)}
+            onFocus={() => setShowParentResults(true)}
+            placeholder="Search for parent..."
+            required
+            className="search-input"
+          />
+          {showParentResults && filteredParents.length > 0 && (
+            <div ref={parentResultsRef} className="search-results">
+              {filteredParents.map((person) => (
+                <div
+                  key={person.id}
+                  className="search-result-item"
+                  onClick={() => handleParentSelect(person)}
+                >
+                  {getPersonName(person)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="form-group">
         <label htmlFor="child_id">Child *</label>
-        <select
-          id="child_id"
-          value={formData.child_id}
-          onChange={(e) => handleChange('child_id', e.target.value)}
-          required
-        >
-          <option value="">Select child...</option>
-          {persons
-            .filter((p) => p.id !== formData.parent_id)
-            .map((person) => (
-              <option key={person.id} value={person.id}>
-                {getPersonName(person)}
-              </option>
-            ))}
-        </select>
+        <div className="search-field-container">
+          <input
+            ref={childInputRef}
+            id="child_id"
+            type="text"
+            value={childSearch}
+            onChange={(e) => handleChildSearchChange(e.target.value)}
+            onFocus={() => setShowChildResults(true)}
+            placeholder="Search for child..."
+            required
+            className="search-input"
+          />
+          {showChildResults && filteredChildren.length > 0 && (
+            <div ref={childResultsRef} className="search-results">
+              {filteredChildren.map((person) => (
+                <div
+                  key={person.id}
+                  className="search-result-item"
+                  onClick={() => handleChildSelect(person)}
+                >
+                  {getPersonName(person)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="form-group">

@@ -117,8 +117,14 @@
   color: #374151;
 }
 
-.edit-button {
+.person-details-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   margin-top: 1rem;
+}
+
+.edit-button {
   padding: 0.75rem;
   background: #6366f1;
   color: white;
@@ -131,6 +137,21 @@
 
 .edit-button:hover {
   background: #4f46e5;
+}
+
+.delete-button {
+  padding: 0.75rem;
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.delete-button:hover {
+  background: #b91c1c;
 }
 
 .union-details {
@@ -177,5 +198,108 @@
 
 .context-menu button:not(:last-child) {
   border-bottom: 1px solid #e5e7eb;
+}
+
+.delete-confirm-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.delete-confirm-content p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.delete-confirm-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.delete-confirm-button-danger {
+  background: #dc2626;
+  color: white;
+}
+
+.delete-confirm-button-danger:hover {
+  background: #b91c1c;
+}
+
+.delete-confirm-button-cancel {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.delete-confirm-button-cancel:hover {
+  background: #d1d5db;
+}
+
+.relationships-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.relationships-section h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1.125rem;
+  color: #374151;
+  font-weight: 600;
+}
+
+.relationship-group {
+  margin-bottom: 1rem;
+}
+
+.relationship-group:last-child {
+  margin-bottom: 0;
+}
+
+.relationship-group strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #374151;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.relationship-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.relationship-list li {
+  padding: 0.5rem 0.75rem;
+  background: #f9fafb;
+  border-radius: 4px;
+  border-left: 3px solid #6366f1;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.relationship-type {
+  color: #6b7280;
+  font-size: 0.8125rem;
+  font-style: italic;
+}
+
+.relationship-status {
+  color: #6b7280;
+  font-size: 0.8125rem;
 }
 

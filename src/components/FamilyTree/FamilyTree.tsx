@@ -21,8 +21,10 @@ import { ParentOfForm } from '../forms/ParentOfForm';
 import {
   getFamilyTreeGraph,
   createPerson,
+  updatePerson,
   createUnion,
   createParentOf,
+  deletePerson,
 } from '../../services/familyTreeService';
 import type {
   FamilyTreeGraph,
@@ -82,6 +84,7 @@ function transformToReactFlow(graph: FamilyTreeGraph) {
 function FamilyTreeInner() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const [graphData, setGraphData] = useState<FamilyTreeGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<Person | null>(null);
@@ -90,6 +93,8 @@ function FamilyTreeInner() {
   const [showPersonModal, setShowPersonModal] = useState(false);
   const [showUnionModal, setShowUnionModal] = useState(false);
   const [showParentOfModal, setShowParentOfModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [personToDelete, setPersonToDelete] = useState<Person | null>(null);
   const [preSelectedParent, setPreSelectedParent] = useState<string | undefined>();
   const [preSelectedChild, setPreSelectedChild] = useState<string | undefined>();
   const [preSelectedPerson1, setPreSelectedPerson1] = useState<string | undefined>();
@@ -108,6 +113,7 @@ function FamilyTreeInner() {
     setError(null);
     try {
       const graph = await getFamilyTreeGraph();
+      setGraphData(graph);
       const { nodes: rfNodes, edges: rfEdges } = transformToReactFlow(graph);
       setNodes(rfNodes);
       setEdges(rfEdges);
@@ -176,8 +182,15 @@ function FamilyTreeInner() {
   );
 
   const handleCreatePerson = async (data: CreatePersonInput) => {
-    await createPerson(data);
+    if (editingPerson) {
+      // Update existing person
+      await updatePerson(editingPerson.id, data);
+    } else {
+      // Create new person
+      await createPerson(data);
+    }
     setShowPersonModal(false);
+    setEditingPerson(null);
     await loadGraph();
   };
 
@@ -197,6 +210,21 @@ function FamilyTreeInner() {
     await loadGraph();
   };
 
+  const handleDeletePerson = async () => {
+    if (!personToDelete) return;
+    
+    try {
+      await deletePerson(personToDelete.id);
+      setShowDeleteConfirmModal(false);
+      setPersonToDelete(null);
+      setSelectedNode(null);
+      await loadGraph();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete person');
+      console.error('Error deleting person:', err);
+    }
+  };
+
   const handleContextMenuAction = (action: string, personId: string) => {
     setContextMenu(null);
     if (action === 'add-child') {
@@ -210,6 +238,38 @@ function FamilyTreeInner() {
       setShowParentOfModal(true);
     }
   };
+
+  // Get relationships for a person
+  const getPersonRelationships = useCallback((personId: string) => {
+    if (!graphData) return { parents: [], children: [], spouses: [] };
+
+    const parents = graphData.parentOf
+      .filter(rel => rel.child_id === personId)
+      .map(rel => {
+        const parent = graphData.nodes.find(p => p.id === rel.parent_id);
+        return { person: parent, type: rel.parent_type };
+      })
+      .filter(item => item.person !== undefined) as Array<{ person: Person; type: string | null }>;
+
+    const children = graphData.parentOf
+      .filter(rel => rel.parent_id === personId)
+      .map(rel => {
+        const child = graphData.nodes.find(p => p.id === rel.child_id);
+        return { person: child, type: rel.parent_type };
+      })
+      .filter(item => item.person !== undefined) as Array<{ person: Person; type: string | null }>;
+
+    const spouses = graphData.unions
+      .filter(rel => rel.person1_id === personId || rel.person2_id === personId)
+      .map(rel => {
+        const spouseId = rel.person1_id === personId ? rel.person2_id : rel.person1_id;
+        const spouse = graphData.nodes.find(p => p.id === spouseId);
+        return { person: spouse, union: rel };
+      })
+      .filter(item => item.person !== undefined) as Array<{ person: Person; union: UnionRow }>;
+
+    return { parents, children, spouses };
+  }, [graphData]);
 
   const nodesWithHandlers = layoutedNodes.map((node) => ({
     ...node,
@@ -362,6 +422,46 @@ function FamilyTreeInner() {
         />
       </Modal>
 
+      <Modal
+        isOpen={showDeleteConfirmModal}
+        onClose={() => {
+          setShowDeleteConfirmModal(false);
+          setPersonToDelete(null);
+        }}
+        title="Confirm Delete"
+      >
+        <div className="delete-confirm-content">
+          <p>
+            Are you sure you want to delete{' '}
+            <strong>
+              {personToDelete
+                ? [personToDelete.first_name, personToDelete.last_name]
+                    .filter(Boolean)
+                    .join(' ') || 'this person'
+                : 'this person'}
+            </strong>
+            ? This action cannot be undone.
+          </p>
+          <div className="delete-confirm-actions">
+            <button
+              className="delete-confirm-button delete-confirm-button-danger"
+              onClick={handleDeletePerson}
+            >
+              Delete
+            </button>
+            <button
+              className="delete-confirm-button delete-confirm-button-cancel"
+              onClick={() => {
+                setShowDeleteConfirmModal(false);
+                setPersonToDelete(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <Sidebar
         isOpen={!!selectedNode || !!selectedEdge}
         onClose={() => {
@@ -370,77 +470,144 @@ function FamilyTreeInner() {
         }}
         title={selectedNode ? 'Person Details' : 'Union Details'}
       >
-        {selectedNode && (
-          <div className="person-details">
-            {selectedNode.photo_url && (
-              <img
-                src={selectedNode.photo_url}
-                alt="Person"
-                className="person-details-photo"
-              />
-            )}
-            <h3>
-              {[selectedNode.first_name, selectedNode.last_name]
-                .filter(Boolean)
-                .join(' ') || 'Unknown'}
-            </h3>
-            {selectedNode.maiden_name && (
-              <p className="maiden-name">Maiden: {selectedNode.maiden_name}</p>
-            )}
-            <div className="details-section">
-              <p>
-                <strong>Gender:</strong> {selectedNode.gender || 'Not specified'}
-              </p>
-              {selectedNode.birth_date && (
-                <p>
-                  <strong>Birth:</strong> {selectedNode.birth_date}
-                  {selectedNode.birth_place && ` in ${selectedNode.birth_place}`}
-                </p>
+        {selectedNode && (() => {
+          const relationships = graphData ? getPersonRelationships(selectedNode.id) : null;
+          const hasRelationships = relationships && (
+            relationships.parents.length > 0 || 
+            relationships.children.length > 0 || 
+            relationships.spouses.length > 0
+          );
+
+          return (
+            <div className="person-details">
+              {selectedNode.photo_url && (
+                <img
+                  src={selectedNode.photo_url}
+                  alt="Person"
+                  className="person-details-photo"
+                />
               )}
-              {selectedNode.death_date && (
-                <p>
-                  <strong>Death:</strong> {selectedNode.death_date}
-                  {selectedNode.death_place && ` in ${selectedNode.death_place}`}
-                </p>
+              <h3>
+                {[selectedNode.first_name, selectedNode.last_name]
+                  .filter(Boolean)
+                  .join(' ') || 'Unknown'}
+              </h3>
+              {selectedNode.maiden_name && (
+                <p className="maiden-name">Maiden: {selectedNode.maiden_name}</p>
               )}
-              {selectedNode.occupation && (
+              <div className="details-section">
                 <p>
-                  <strong>Occupation:</strong> {selectedNode.occupation}
+                  <strong>Gender:</strong> {selectedNode.gender || 'Not specified'}
                 </p>
-              )}
-              {selectedNode.email && (
-                <p>
-                  <strong>Email:</strong> {selectedNode.email}
-                </p>
-              )}
-              {selectedNode.phone && (
-                <p>
-                  <strong>Phone:</strong> {selectedNode.phone}
-                </p>
-              )}
-              {selectedNode.current_address && (
-                <p>
-                  <strong>Address:</strong> {selectedNode.current_address}
-                </p>
-              )}
-              {selectedNode.notes && (
-                <div>
-                  <strong>Notes:</strong>
-                  <p>{selectedNode.notes}</p>
+                {selectedNode.birth_date && (
+                  <p>
+                    <strong>Birth:</strong> {selectedNode.birth_date ? new Date(selectedNode.birth_date).toLocaleDateString() : 'Not specified'}
+                    {selectedNode.birth_place && ` in ${selectedNode.birth_place}`}
+                  </p>
+                )}
+                {selectedNode.death_date && (
+                  <p>
+                    <strong>Death:</strong> {selectedNode.death_date ? new Date(selectedNode.death_date).toLocaleDateString() : 'Not specified'}
+                    {selectedNode.death_place && ` in ${selectedNode.death_place}`}
+                  </p>
+                )}
+                {selectedNode.occupation && (
+                  <p>
+                    <strong>Occupation:</strong> {selectedNode.occupation}
+                  </p>
+                )}
+                {selectedNode.email && (
+                  <p>
+                    <strong>Email:</strong> {selectedNode.email}
+                  </p>
+                )}
+                {selectedNode.phone && (
+                  <p>
+                    <strong>Phone:</strong> {selectedNode.phone}
+                  </p>
+                )}
+                {selectedNode.current_address && (
+                  <p>
+                    <strong>Address:</strong> {selectedNode.current_address}
+                  </p>
+                )}
+                {selectedNode.notes && (
+                  <div>
+                    <strong>Notes:</strong>
+                    <p>{selectedNode.notes}</p>
+                  </div>
+                )}
+              </div>
+              {hasRelationships && relationships && (
+                <div className="relationships-section">
+                  <h4>Relationships</h4>
+                  {relationships.parents.length > 0 && (
+                    <div className="relationship-group">
+                      <strong>Parents:</strong>
+                      <ul className="relationship-list">
+                        {relationships.parents.map(({ person, type }) => (
+                          <li key={person.id}>
+                            {[person.first_name, person.last_name].filter(Boolean).join(' ') || 'Unknown'}
+                            {type && <span className="relationship-type"> ({type})</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {relationships.children.length > 0 && (
+                    <div className="relationship-group">
+                      <strong>Children:</strong>
+                      <ul className="relationship-list">
+                        {relationships.children.map(({ person, type }) => (
+                          <li key={person.id}>
+                            {[person.first_name, person.last_name].filter(Boolean).join(' ') || 'Unknown'}
+                            {type && <span className="relationship-type"> ({type})</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {relationships.spouses.length > 0 && (
+                    <div className="relationship-group">
+                      <strong>Spouses/Partners:</strong>
+                      <ul className="relationship-list">
+                        {relationships.spouses.map(({ person, union }) => (
+                          <li key={person.id}>
+                            {[person.first_name, person.last_name].filter(Boolean).join(' ') || 'Unknown'}
+                            {union.type && <span className="relationship-type"> - {union.type}</span>}
+                            {union.status && union.status !== 'ongoing' && (
+                              <span className="relationship-status"> ({union.status})</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
+              <div className="person-details-actions">
+              <button
+                className="edit-button"
+                onClick={() => {
+                  setEditingPerson(selectedNode);
+                  setShowPersonModal(true);
+                }}
+              >
+                Edit Person
+              </button>
+              <button
+                className="delete-button"
+                onClick={() => {
+                  setPersonToDelete(selectedNode);
+                  setShowDeleteConfirmModal(true);
+                }}
+              >
+                Delete Person
+              </button>
             </div>
-            <button
-              className="edit-button"
-              onClick={() => {
-                setEditingPerson(selectedNode);
-                setShowPersonModal(true);
-              }}
-            >
-              Edit Person
-            </button>
-          </div>
-        )}
+            </div>
+          );
+        })()}
         {selectedEdge && (
           <div className="union-details">
             <p>

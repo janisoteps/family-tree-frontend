@@ -61,10 +61,11 @@ export function PersonNode(props: NodeProps) {
     >
       <Handle type="target" position={Position.Top} id="top" />
       <Handle type="source" position={Position.Bottom} id="bottom" />
-      <Handle type="source" position={Position.Left} id="left" />
-      <Handle type="target" position={Position.Left} id="left-target" />
+      <Handle type="target" position={Position.Left} id="left" />
       <Handle type="source" position={Position.Right} id="right" />
       <Handle type="target" position={Position.Right} id="right-target" />
+      
+      {isDeceased && <div className="person-node-ribbon" />}
       
       <div className="person-node-photo">
         {nodeData.photo_url ? (
