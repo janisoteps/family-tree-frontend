@@ -65,6 +65,8 @@ function transformToReactFlow(graph: FamilyTreeGraph) {
       markerEnd: {
         type: 'arrowclosed' as const,
         color: '#9ca3af',
+        width: 30,
+        height: 30,
       },
     })),
     ...graph.unions.map((rel) => ({

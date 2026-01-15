@@ -1,4 +1,4 @@
-import { getSmoothStepPath } from '@xyflow/react';
+import { getBezierPath } from '@xyflow/react';
 import type { EdgeProps } from '@xyflow/react';
 import type { ParentOfRow } from '../../types/familyTree';
 import './ParentEdge.css';
@@ -18,7 +18,7 @@ export function ParentEdge(props: EdgeProps) {
     markerEnd,
   } = props;
 
-  const [edgePath] = getSmoothStepPath({
+  const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
